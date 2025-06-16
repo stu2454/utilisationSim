@@ -1,0 +1,10 @@
+# ── docker-compose.yml ───────────────────────────────────────────────────
+services:
+  at-explorer:
+    build: .
+    ports:
+      - "8501:8501"  # host:container
+    volumes:
+      - .:/app        # hot‑reload on code changes
+    environment:
+      - STREAMLIT_SERVER_COOKIE_SECRET=randomsecret
