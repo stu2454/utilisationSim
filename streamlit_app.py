@@ -2,6 +2,7 @@ from pathlib import PurePosixPath
 from typing import Dict
 import zipfile
 import re
+import hashlib
 
 import pandas as pd
 import altair as alt
@@ -23,8 +24,10 @@ EXPECTED = {
 }
 
 @st.cache_data(show_spinner=False)
-def _read_lower(buf) -> pd.DataFrame:
-    df = pd.read_csv(buf)
+def _read_lower(file_content: bytes, filename: str) -> pd.DataFrame:
+    """Read CSV from bytes content and normalize column names"""
+    import io
+    df = pd.read_csv(io.BytesIO(file_content))
     df.columns = [c.lower().strip() for c in df.columns]
     return df
 
@@ -39,7 +42,8 @@ def load_data(upload) -> Dict[str, pd.DataFrame]:
         return {}
     name = upload.name.lower()
     if name.endswith('.csv'):
-        return {name: _read_lower(upload)}
+        content = upload.read()
+        return {name: _read_lower(content, name)}
     if name.endswith('.zip'):
         dfs, missing = {}, set(EXPECTED)
         with zipfile.ZipFile(upload) as zf:
@@ -49,7 +53,8 @@ def load_data(upload) -> Dict[str, pd.DataFrame]:
                 tail = PurePosixPath(member).name.lower()
                 if tail in EXPECTED:
                     with zf.open(member) as f:
-                        dfs[tail] = _read_lower(f)
+                        content = f.read()
+                        dfs[tail] = _read_lower(content, tail)
                         missing.discard(tail)
         if missing:
             st.warning('Missing: ' + ', '.join(sorted(missing)))
@@ -103,7 +108,8 @@ def rename(df: pd.DataFrame, mapping: Dict[str, str]) -> pd.DataFrame:
 df_part = rename(df_part, REN_PART)
 if 'Hashed_Participant_ID' not in df_part.columns:
     candidates = [c for c in df_part.columns if 'id' in c.lower()]
-    df_part['Hashed_Participant_ID'] = df_part[candidates[0]]
+    if candidates:
+        df_part['Hashed_Participant_ID'] = df_part[candidates[0]]
 df_plan = rename(df_plan, REN_PLAN)
 df_claim = rename(df_claim, REN_CLAIM)
 
@@ -184,7 +190,7 @@ cols[1].metric(
 cols[2].metric(
     'Util %',
     f'{util_pct:.1f}%',
-    help="Share of the approved budget that’s been paid (Paid ÷ Budget)."
+    help="Share of the approved budget that's been paid (Paid ÷ Budget)."
 )
 cols[3].metric(
     '0% draw',
